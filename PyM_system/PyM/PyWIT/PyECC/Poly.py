@@ -1198,6 +1198,8 @@ class Monomial_type(Base_type.Base_type):
             return self.cp()
         if variables == None:
             if self._varOrder == None:
+                print(value)
+                print(self._index)
                 return value**self._index[-1]*Monomial_type(self._value, self._variables[:-1], self._index[:-1], self._structure)
             else:
                 varOrder = []
