@@ -149,9 +149,13 @@ def Reed_Salomon_Code(a,k):
 RS = Reed_Salomon_Code
 
 def BCH_Code(alpha,d,l=1,K=''):
+    print("kaki-1")
     n = order(alpha)
+    print("kaki0")
     h = geometric_series(alpha**l,n)
+    print("kaki1")
     a = geometric_series(alpha, n)
+    print("kaki2")
     return AC(h,a,d-1,K)
 # alias    
 BCH = BCH_Code

@@ -3,6 +3,7 @@ import numpy as np
 from segment import Segment
 from typing import Callable
 from code_with_syndrome import CodeWithSyndrome
+from PyM import *
 
 
 class TensorProductCodes(Code):
@@ -35,7 +36,7 @@ class TensorProductCodes(Code):
             self.syndrome_array[i] = self.inner_code.calculate_syndrome(self.segments[i])
         # look at each syndrome as a symbol in the extended code and decode them
         symbol_array_from_syndroms = self.syndrome_array # maybe add some conversion
-        decoded_symbols = self.outer_code.decode(symbol_array_from_syndroms)
+        decoded_symbols = self.outer_code.encode(symbol_array_from_syndroms)
         self.syndrome_array = decoded_symbols # add oposite side conversion
         
         start_location_of_constraint_segments = end_location_of_constraintless_segments
