@@ -5,3 +5,7 @@ class Segment:
         self.information_bits = np.array(information_bits)
         self.coded_segment = np.array(coded_segment)
 
+    def __repr__(self):
+        s = "--------- segment ---------\n"
+        s += str(self.coded_segment)
+        return s

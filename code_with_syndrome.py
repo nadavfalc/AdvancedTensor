@@ -2,8 +2,8 @@ from code import *
 import numpy as np
 
 class CodeWithSyndrome(Code):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, q, n, k):
+        super().__init__(q, n, k)
 
     @abc.abstractmethod
     def encode(self, x: np.array, syndrome: np.array) -> np.array:
@@ -29,7 +29,7 @@ class CodeWithSyndrome(Code):
         pass
     
     @abc.abstractmethod
-    def calculate_syndrome(self, x: np.array) -> np.array:
+    def calculate_syndrome(self, x: np.array) -> int:
         """
         Receives an input sequence
         Returns the syndrome of the input sequence

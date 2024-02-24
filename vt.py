@@ -68,7 +68,7 @@ class VTCode:
         else:
             if n_y != self.n:
                 y = _correct_q_ary_indel(self.n, self.m, self.a, self.b, self.q, y)
-        return self._decode_codeword(y)
+        return self._decode_codeword(y), y
 
     def encode(self, x):
         '''

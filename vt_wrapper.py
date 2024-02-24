@@ -1,55 +1,60 @@
 from code_with_syndrome import CodeWithSyndrome
-from vt import VTCode, decimal_to_binary_array
+from vt import *
 import numpy as np
 
-class VTWrapper(CodeWithSyndrome):
-    def __init__(self, q, n, k, systematic_locs=[]):
-        if systematic_locs == []:
-            self.systemaic_locs = [2 ** i for i in range(int(np.log2(n)))]
-        super().__init__(q=q, n=n, k=k, self.systemaic_locs)
 
-    def encode(self, x: np.array, syndrome: np.array) -> np.array:
+def remove_elements_by_indexes(A, B):
+    # Sort the indexes in descending order to avoid index shifting when removing elements
+    new_A = []    
+    # Remove elements from list A based on the indexes in list B
+    for i, a in enumerate(A):
+        if i + 1 not in B:
+            new_A.append(a)
+    
+    return new_A
+
+
+class VTWrapper(CodeWithSyndrome):
+    def __init__(self, q, n, systematic_locs=[]):
+        k = find_k(n, q)
+        super().__init__(q, n, k)
+        self.systematic_locs = []
+        if systematic_locs == []:
+            i = 0
+            while q ** i < n:
+                self.systematic_locs.append(q ** i)
+                i += 1
+        else:
+            self.systematic_locs = systematic_locs
+        
+    def encode(self, x: np.array, syndrome: int) -> np.array:
         """
         encode a codeword of length k to a VT_0(self.n) codeword with systematic positions received as inputs
         """
-        vt = VTCode(n=self.n, q=self.q, a=syndrome, systematic_locs=self.systematic_locs)
-        # assert len(x) == self.k, ("kaki", len(x), self.k)
-        c_ = np.zeros(self.n)
-        # mod n and not mod n+1 because in cs we start from 0
-        c_i = 0
+        vt = VTCode(self.n, self.q, syndrome, systematic_locs=self.systematic_locs) 
+        return vt.encode(x)
         
-        for i in range(self.n):
-            if i not in self.vt.systematic_locs:
-                c_[i] = x[c_i]
-                c_i += 1        
-                
-        # i+1 and not mod i because in cs we start from 0
-        syn_c_ = sum((i+1) * c_i for i, c_i in enumerate(c_)) % (self.n + 1)
-        for i in range(2 ** len(self.vt.systematic_locs)):
-            bin_a = decimal_to_binary_array(i, pad=len(self.vt.systematic_locs))
-            syn = (np.sum(np.multiply(self.vt.systematic_locs+np.ones(len(self.vt.systematic_locs)), bin_a))) % (self.n + 1)
-            if (syn + syn_c_) % (self.n + 1) == self.syndrome:
-                c_[self.vt.systematic_locs] = bin_a
-                return c_
-        assert True, "no codeword found"
-        
-    def decode(self, x: np.array, syndrome: np.array) -> np.array:
+    def decode(self, c: np.array, syndrome: int) -> np.array:
         """
         Receives an errorneous sequence
         Returns the decoded sequence
         """
-        vt = VTCode(n=self.n, q=self.q, a=syndrome, systematic_locs=self.systematic_locs)
-        return vt.decode(x)
+        vt = VTCode(self.n, self.q, syndrome, systematic_locs=self.systematic_locs) 
+        x, c = vt.decode(c)
+        return x, c
 
     def get_rate(self) -> np.float32:
         """
         returns the calculation of the current codes rate
         """
-        return self.k / self
+        return self.k / self.n
     
-    def calculate_syndrome(self, x: np.array) -> np.array:
+    def calculate_syndrome(self, x: np.array) -> int:
         """
         Receives an input sequence
         Returns the syndrome of the input sequence
         """
-        return [x[i] * (i + 1) for i in range(len(x))]
+        return int(sum([x[i] * (i + 1) for i in range(len(x))])) % (self.n + 1)
+    
+    
+    

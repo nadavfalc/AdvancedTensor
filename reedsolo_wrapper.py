@@ -50,10 +50,13 @@ class ReedSoloWrapper(Code):
         self.r = r
         self.k = self.n - self.r
         self.F_base = Zn(base)
-        
-        F_poly = get_irreducible_polynomial(self.F_base, f_extension)
-        [self.F,b]= extension (self.F_base, F_poly, 'a')
-        self.F_size = base ** f_extension
+        if f_extension == 1:
+            self.F = self.F_base
+            self.F_size = base
+        else:
+            F_poly = get_irreducible_polynomial(self.F_base, f_extension)
+            [self.F,b]= extension (self.F_base, F_poly, 'a')
+            self.F_size = base ** f_extension
         print("order of prime in F is", order(local_primitive_root(self.F)))
         
         self.create_systematic_G()
@@ -91,24 +94,18 @@ class ReedSoloWrapper(Code):
             res = one_
             for i in range(self.k):
                 if skip_i != i:
-                    print(x, "-----", alpha ** i)
                     res *= (x - alpha ** i)
             return res
 
         def _f_x_i(x, alpha, i):
             mone = _f_x(x, alpha)
-            print("x", x, " alpha", alpha, "mone1", mone)
             mechane = (x - alpha ** i)
-            print("mechane1", mechane)
             return mone / mechane
         
         # find primitive element in the RS field
         for i in range(3, self.F_size):
-            print("--------------------------")
             elem = element(i, self.F)
-            print("powers of", elem, ":")
             for j in range(1, self.F_size - 1):
-                print(j, ":", elem ** j, elem ** j == 1, elem ** j == one_)
                 if elem ** j == one_:
                     break
                 if j == self.F_size - 2:
@@ -116,14 +113,12 @@ class ReedSoloWrapper(Code):
                     break
         # create the RS field using the primitive element
         a = geometric_series(alpha, self.n) 
-        print(a)
         C = RS(a,self.k)
         # convert G to be systematic
         for i in range(self.k):
             for j in range(self.n):
                 mone = _f_x(alpha **j, alpha, i)
                 mechane = _f_x(alpha ** i, alpha, i)
-                print(mone, "/", mechane)
                 val = mone / mechane
                 G_(C)[i,j] = val
         self.G = G_(C)
@@ -141,12 +136,14 @@ class ReedSoloWrapper(Code):
         return self.encode_vector(u)
 
     def encode_vector(self, u_vec) -> np.array:
-        return u * self.G
+        G = self.G
+        word = u_vec
+        
+        return u_vec * self.G
     
     
-    def decode(self, y: np.array, e) -> np.array:
-        print("received ", y)
-        print("e=", e)
+    def decode(self, y: np.array, e: np.array) -> np.array:
+        
         erasure_locations = [i for i,x in enumerate(e) if x != 0]
         bad_H = submatrix(self.H, erasure_locations)
         no_error_locations = [i for i,x in enumerate(e) if x == 0]
@@ -173,19 +170,21 @@ class ReedSoloWrapper(Code):
         return (self.n - self.r) / self.n
     
     
-
-C = ReedSoloWrapper()
-num_of_erasures = 3
-for i in range(0, 300):
-    u = rd_error_vector(C.k, C.k // 2, C.F_base)
-    c = C.encode_vector(u)
-    e = rd_error_vector(C.n, num_of_erasures, C.F)
-    print(c)
-    y = c + e
-    x_, c_ = C.decode(y, e)
-    assert all(x_[i] == u[i] for i in range(len(x_))), (u, x_)
-    
-print("Test is successful")
+if __name__ == "__main__":
+    C = ReedSoloWrapper(n=16, r=8, base=17, f_extension=1)
+    num_of_erasures = 7
+    for i in range(0, 300):
+        u = rd_error_vector(C.k, C.k // 2, C.F_base)
+        c = C.encode_vector(u)
+        """print("pip", C.G._value)
+        exit()"""
+        e = rd_error_vector(C.n, num_of_erasures, C.F)
+        print(c)
+        y = c + e
+        x_, c_ = C.decode(y, e)
+        assert all(x_[i] == u[i] for i in range(len(x_))), (u, x_)
+        
+    print("Test is successful")
     
     
 
