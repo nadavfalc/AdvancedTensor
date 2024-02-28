@@ -132,7 +132,6 @@ class ReedSoloWrapper(Code):
         u = [element(u_i, self.F) for u_i in u]
         # after converting each one 
         u = vector(u)
-        print("starting u", u)
         return self.encode_vector(u)
 
     def encode_vector(self, u_vec) -> np.array:

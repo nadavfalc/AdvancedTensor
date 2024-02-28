@@ -49,8 +49,12 @@ class TensorProductCodes(Code):
         k += self.inner_code.k * (self.outer_code.n - self.outer_code.k)
         super().__init__(q=q, n=inner_code.n * outer_code.n, k=k)
         Z2 = Zn(2)
+        self.info_rs_symbol_len = 6
+        self.info_rs_r = 6
+        self.info_rs_n = self.k // self.info_rs_symbol_len
+
         # creating 2^8
-        F_poly = get_irreducible_polynomial(Z2, 8)
+        F_poly = get_irreducible_polynomial(Z2, self.info_rs_symbol_len)
         [self.F_info,b]= extension (Z2, F_poly, 'a')
         self.segments = []
         self.syndrome_array = np.empty(self.column_length)
@@ -105,20 +109,20 @@ class TensorProductCodes(Code):
         missing_bits = solve_linear_system(bad_H, -syn)
         c = y
         for i, loc in enumerate(erasure_locations):
-            print(loc, i)
             c[loc] = missing_bits[i]
-        x_ = c[:23]
+        x_ = c[:self.info_rs_n -self.info_rs_r]
         return x_, c
     
     
     def create_info_bits_rs(self):
         F_info = self.F_info
-        n = self.k // 8
-        k = n - 4
+        n = self.k // self.info_rs_symbol_len
+        assert n == 36, n
+        k = n - self.info_rs_r
         a = [element(j,F_info) for j in range(2,256) if is_prime(j)][:n]
         h = [element(j,F_info) for j in range(1,1+len(a))]
 
-        self.H_info = vandermonde(a, 4)
+        self.H_info = vandermonde(a, self.info_rs_r)
         self.G_info = left_kernel(transpose(self.H_info))
     
     
@@ -151,13 +155,12 @@ class TensorProductCodes(Code):
             else:
                 erasure_vector[i] = 1
         if sum(erasure_vector) > self.outer_code.r:
-            print("too many errors!!")
-            return np.zeros(self.k)
+            # print("too many errors!!")
+            return np.zeros(1)
         _, phantom_syn_vector  = self.outer_code.decode(phantom_syn_vector, erasure_vector)
         
         # from this point we have the syndromes of all the segment
         phantom_syn_vector_int = [convert_field_element_to_index(el, self.outer_code.F) for el in phantom_syn_vector]
-        
         error_locations = np.empty(0)
         for i, s in enumerate(segments_estimation):
             cur_seg_syndrome = phantom_syn_vector_int[i]
@@ -166,7 +169,7 @@ class TensorProductCodes(Code):
             if len(s) < self.inner_code.n - 1:
                 # the segment is corrupted. we want to remember it and save the erasued locations
                 # based on wether that segment was encoded with vt or not
-                print(f"segment {i} has >1 errors")
+                # print(f"segment {i} has >1 errors")
                 cur_decoded_result_length = len(final_result)
                 if i < self.number_of_constraintless_segments:
                     # all of this segments bits were information bits
@@ -195,14 +198,14 @@ class TensorProductCodes(Code):
                 else:
                     information_bits_of_seg = decoded_vt_bits
                 final_result = np.concatenate([final_result, information_bits_of_seg])
-            
+        # print("200", len(final_result), final_result)
         # at this point we have the information bits one after the other, with -1 in locations of erasures.
         # no we prepare to use the inner RS code. we need to create a vector.
         final_result_in_symbols = []
         erasure_locations = []
         assert len(final_result) == self.k, (len(final_result), self.k)
-        for i in range(0, len(final_result), 8):
-            seg_bits = final_result[i: i+8]
+        for i in range(0, len(final_result), self.info_rs_symbol_len):
+            seg_bits = final_result[i: i+self.info_rs_symbol_len]
             if -1 in seg_bits:
                 erasure_symbol = 1
                 new_symbol = element(0, self.F_info)
@@ -212,35 +215,40 @@ class TensorProductCodes(Code):
                 erasure_symbol = 0
             final_result_in_symbols += [new_symbol]
             erasure_locations += [erasure_symbol]
-        if sum(erasure_locations) > 4:
+        # print("218:", len(final_result_in_symbols), final_result_in_symbols)
+        if sum(erasure_locations) > self.info_rs_r:
             # cant be recovered
-            print("erasures2:", sum(erasure_locations))
-            return np.zeros(self.k)
+            # print("erasures2:", sum(erasure_locations))
+            return np.zeros(1)
         
         x_, c = self.decode_rs(vector(final_result_in_symbols), erasure_locations)
+        # print("225:", len(x_), x_)
         x_binary = np.empty(0)
-        for el in x_:
+        for i, el in enumerate(x_):
             symbol_in_bits = convert_field_element_to_index(el, self.F_info)
-            seymbol_bits = decimal_to_binary_array(symbol_in_bits, 8)
+            # print(symbol_in_bits)
+            seymbol_bits = decimal_to_binary_array(symbol_in_bits, self.info_rs_symbol_len)
+            # print(seymbol_bits)
             x_binary = np.concatenate([x_binary, seymbol_bits])
+            # print(i)
         return x_binary
     
     def get_rate(self):
-        return (self.k - 32)  / self.n 
+        return (self.k - self.info_rs_r * self.info_rs_symbol_len)  / self.n 
     
     
 def make_errors_in_tensor(segments, p_d):
-    
+    s = "error in: "
     for i in range(len(segments)):
         cur_segment = segments[i]
         num_dels = 0
         for j in range(len(cur_segment)):
             random_number = random.random()
             if random_number < p_d:
-                print(f"error in {i, j}")
+                s += f"{i, j}, "
                 segments[i] = np.delete(segments[i], j - num_dels)
                 num_dels += 1
-                
+    # print(s)
     return segments
     
 
@@ -256,11 +264,11 @@ def generate_information_bits(tc: TensorProductCodes):
     G = tc.G_info
     F_info = tc.F_info
     
-    info_bits = np.random.randint(2, size=tc.k - 4 * 8, dtype=np.uint8)
+    info_bits = np.random.randint(2, size=tc.k - tc.info_rs_r * tc.info_rs_symbol_len, dtype=np.uint8)
     
     word = []
-    for i in range(0, len(info_bits), 8):
-        in_bits = info_bits[i:i+8]
+    for i in range(0, len(info_bits), tc.info_rs_symbol_len):
+        in_bits = info_bits[i:i+tc.info_rs_symbol_len]
         packed_bytes = np.packbits(in_bits)
         decimal_number = int.from_bytes(packed_bytes, byteorder='big')
         word.append(element(decimal_number,F_info))
@@ -276,7 +284,9 @@ def generate_information_bits(tc: TensorProductCodes):
 
 def test_code(N, p_d, tc):
     
-    
+    print("rate:", tc.get_rate())
+    print(f"total length= {tc.n}")
+    print(f"deletion prob= ", p_d)
     F_info = tc.F_info
     total_success = 0
     for i in range(N):
@@ -285,10 +295,10 @@ def test_code(N, p_d, tc):
         binary_bits = np.empty(0)
         for el in info_bits:
             element_in_int = convert_field_element_to_index(el, F_info)
-            element_in_binary_representation = decimal_to_binary_bits(element_in_int, 8)
+            element_in_binary_representation = decimal_to_binary_bits(element_in_int, tc.info_rs_symbol_len)
             binary_bits = np.concatenate([binary_bits, element_in_binary_representation])
         assert len(binary_bits) == tc.k, (len(binary_bits), tc.k)
-        print("Information bits to encode")
+        # print("Information bits to encode")
         tc.encode(binary_bits)
 
         info_segments = [s.information_bits for s in tc.segments]
@@ -300,43 +310,42 @@ def test_code(N, p_d, tc):
         
         decoded_segments = tc.decode(segments_with_errors, segments_with_errors)
         
-        if len(decoded_segments) != 184:
-            print("len(decoded_segments)", len(decoded_segments))
-            print("tc.outer_code.n=", tc.outer_code.n)
-            print(f"decoding {i} unssucsesful")
+        if len(decoded_segments) != 180:
+            # print("len(decoded_segments)", len(decoded_segments))
+            # print("tc.outer_code.n=", tc.outer_code.n)
+            # print(f"decoding {i} unssucsesful")
             continue
         
         
         
         is_equal = True
         
-        for j in range(184):
+        for j in range(180):
             if int(info_segments[j]) != int(decoded_segments[j]):
-                print("diff in index", j)
+                #print("diff in index", j)
                 is_equal = False
         
         if is_equal:            
-            print(f"test successful {i}")
+            #print(f"test successful {i}")
             total_success += 1
         else:
-            print(f"Mistake in decoding {i}")
-            for i in range(0, tc.number_of_constraintless_segments * 16, 16):
-                print("<<<<<<Segment ", i // 16)
-                print(info_segments[i:i+16])
-                print(decoded_segments[i:i+16])
+            """print(f"Mistake in decoding {i}")
+            for j in range(0, tc.number_of_constraintless_segments * 16, 16):
+                print("<<<<<<Segment ", j // 16)
+                print(info_segments[j:j+16])
+                print(decoded_segments[j:j+16])
                 print(">>>>>>")
-            for i in range(tc.number_of_constraintless_segments * 16, 184, 11):
+            for i in range(tc.number_of_constraintless_segments * 16, 180, 11):
                 print("<<<<<<Segment ", tc.number_of_constraintless_segments + i // 16)
-                print(info_segments[i:i+11])
-                print(decoded_segments[i:i+11])
-                print(">>>>>>")
+                print(info_segments[j:j+11])
+                print(decoded_segments[j:j+11])
+                print(">>>>>>")"""
 
-        if i % 10 == 0:
-            print("rate:", tc.get_rate())
-            print(f"total length= {tc.n}")
+        if i % 50 == 0:
             FER = (i + 1 - total_success) / (i + 1)
-            print(f"FER= {FER}")
+            print(f"FER= {FER} after {i} tests")
     return FER
+
 
 if __name__ == "__main__":
     q = 2
@@ -353,8 +362,7 @@ if __name__ == "__main__":
     
     tc = TensorProductCodes(q, inner_code, outer_code)
     FERS = {}
-    FERS[0.01] = 0.16206666666666666
-    for p_d in [0.02, 0.03, 0.015, 0.01]:
+    for p_d in [0.02]:
         FERS[p_d] = test_code(10000, p_d, tc)
         print(FERS[p_d])
     print(FERS)
